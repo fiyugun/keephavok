@@ -8,7 +8,7 @@ void ImprimirNombre(char nombre[], int edad){
 }
 
 void Saludar(){
-    printf("::::::::::::::::::::::::::::::Este es el saludo Inicial Mediante una Funcion:::::::::::::::::");
+    printf("::::::::::::::::::::::::::::::Este es el saludo Inicial Mediante una Funcion y agregamos algo en el titulo:::::::::::::::::");
 }
 
 int main() {
@@ -63,9 +63,9 @@ case 3:
     i++;
   }
 
-    printf("\nEl Tamaño del Vector EN MEMORIA %lu",sizeof(vector));
+    printf("\nEl TamaÃ±o del Vector EN MEMORIA %lu",sizeof(vector));
     int length=sizeof(vector) / sizeof(vector[0]);
-    printf("\nEl Tamaño del Vector es de %d",length);
+    printf("\nEl TamaÃ±o del Vector es de %d",length);
 
     char alfabeto[]="ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     printf("\nEl Largo del Alfabeto es %d",strlen(alfabeto));
