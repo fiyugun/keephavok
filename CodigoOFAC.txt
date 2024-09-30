@@ -1,0 +1,1335 @@
+/*EstA És mi cambio en el codigo L1 IF CONDICION = 4 */ 03/09/2024
+/*Este es mi cambio en el codigo L2 IF CONDICION = 4 */ 03/09/2024
+
+/* 
+DESCRIPCION: 
+REQUERIMIENTOS: 
+  - med_identificadosInfo_g3m_t2_variable_execution_name:  Tabla con los clientes hallados que tienen coincidencias con los reportados en las noticias(Desde determinacionPersonas.sql)
+  - resultados_cumplimiento.riesgo_integrado_cliente_ric : Riesgo integral Cliente
+  - med_REQHIS_g3m_t3_variable_execution_name: Número de Requerimientos historicos por nit y ente legal solicitante (Desde determinacionPersonas.sql)
+  - med_ROS_g3m_t1_variable_execution_name: ulitma ingestion de la tabla de ROS (Desde determinacionPersonas.sql)
+  - med_deltaMedios_g3m_t81_variable_execution_name: Registros de noticias que vienen con nit (Desde insumoMedios.sql)
+  - med_cname_nombres_g3m_e1_variable_execution_name:ultima ingestion del CNAME el nombre de clientes activos (Desde insumoClientes.sql)
+  - beg_clientes_gbeg: Base certificada BEG
+  - resultados_vspc_clientes.master_customer_data: Master table para extraer datos demograficos del cliente
+  - med_deltaMedios_g3m_t1_variable_execution_name:tabla original de noticias con consecutivo (Desde insumoMedios.sql)
+  - med_proveedores_g3m_t2_variable_execution_name:tabla proveedores (Desde insumoProveedores.sql)
+  - med_identificados_g3m_l2_variable_execution_name: Clientes identificados con coincidencias de nombre en las noticias y marca de empleados (Desde identificados.sql)
+  - med_DecisionPersona_g3m_t1_variable_execution_name:  Decision sobre las personas  con coincidencia con clientes en cuanto a si ES LA PERSONA o NO ES LA PERSONA (Desde determinacionPersonas.sql)
+  - med_delitos_g3m_t1_variable_execution_name: Delitos validos
+  - med_deltaMedios_g3m_t3_variable_execution_name: 
+  - med_clientes_g3m_t1_variable_execution_name: conocer quienes son empleados
+  - med_clientes_g3m_t3_variable_execution_name: Marcar filial de clientes Bancolombia, entidades y exclientes con prod no cancelados
+  - med_listaCtrl_g3m_t1_variable_execution_name: Personas en listas de control por medios de comunicacion (TODO: usar para excluir alertas ya existentes, usar t2?)  
+PROCESO:
+  - med_riesgoMedios_g3m_t1_variable_execution_name: Obtener para los identificados los requerimientos históricos y los ros (si existen)
+  - med_ric_g3m_t1_variable_execution_name:Ultima ingestion Riesgo Integral Cliente  
+  - med_baseconnitcliente_g3m_t1_variable_execution_name:identificacion de noticiados con nit como clientes o no
+  - med_basecertificadabeg_g3m_t1_variable_execution_name: Base certificada BEG
+  - med_masterCostumer_g3m_t1_variable_execution_name:  datos demograficos del cliente
+  - med_salidabasehomonimia_g3m_t1_variable_execution_name: Conjunto de personas con alta coincidencia de nombres con clientes y variables adicionales que se usaron para decidir si es o no la persona
+  - med_nitplusIdentificados_g3m_t1_variable_execution_name: Identificados por nombre + aquellos con id en la noticia
+  - med_salidaconsolidado_g3m_t1_variable_execution_name:Registros a evaluar formato  
+  - med_salidaalertas_g3m_t1_variable_execution_name:Registros a evaluar formato TBL_ALERTAS_ALD 
+  - med_salidabaseconnit_g3m_t1_variable_execution_name:  BASE_CON_NIT: Contiene los registros que venían con nit    
+  - med_salida_sin_coincidencia_PN_g3m_t1_variable_execution_name: Listas control persona natural noticia sin nit
+  - med_salida_sin_coincidencia_PN_g3m_t2_variable_execution_name: Listas control persona natural noticia sin nit no duplicados
+  - med_salida_sin_coincidencia_Pj_g3m_t1_variable_execution_name: Listas control persona juridica noticia sin nit
+  - med_salida_sin_coincidencia_Pj_g3m_t2_variable_execution_name: Listas control persona juridica noticia sin nit no duplicados
+SALIDA:  
+  - med_salidabaseconnit_g3m_t2_variable_execution_name:  BASE_CON_NIT: Contiene los registros que venían con nit   sin duplicados
+  - med_salidabasehomonimia_g3m_t2_variable_execution_name: SALIDA_BASE_HOMONIMIA: Conjunto de personas con alta coincidencia de nombres con clientes y variables adicionales que se usaron para decidir si es o no la persona, sin duplicados
+  - med_salidaconsolidado_g3m_t2_variable_execution_name: SALIDA_CONSOLIDADA: Usada por analistas de las noticias, sin duplicados
+  - med_salidaalertas_g3m_t2_variable_execution_name: SALIDA_ALERTAS: Registros a evaluar formato TBL_ALERTAS_ALD ->  Coinciden con clientes y se piensa que SI ES LA PERSONA o su riesgo es ALTO o MUY ALTO
+  - med_salidaconnitPN_g3m_t1_variable_execution_name : BASE_CON_NIT_PN : Listas control persona natural noticia con nit
+  - med_salidaconnitPJ_g3m_t1_variable_execution_name: BASE_CON_NIT_PJ: Se añade decisión sobre categoría y subcategoría de LC persona juridica  
+  - med_salida_sin_coincidencia_PN_g3m_t3_variable_execution_name: Listas control persona natural noticia sin nit que no esten ya reportadas
+  - med_salida_sin_coincidencia_Pj_g3m_t3_variable_execution_name: Listas control persona juridica noticia sin nit que no esten ya reportadas
+  - med_trazabilidad_g3m_variable_execution_name: Tabla con la trazabilidad de cada noticia
+    
+AUTOR: joauribe
+
+*/
+
+-- 0. 
+USE variable_dataBase;
+
+
+---------------------------- CALCULO DE RIESGO INTERNO PROCESO MEDIOS -------------------------------------------------
+-- Obtener para los identificados los requerimientos históricos y los ros (si existen)
+
+DROP TABLE IF EXISTS med_riesgoMedios_g3m_t1_variable_execution_name PURGE;
+CREATE TABLE  med_riesgoMedios_g3m_t1_variable_execution_name STORED AS PARQUET AS
+ZELECT 
+t1.llave_nombre_cn,
+t1.consecutivo, -- identificacion de la noticia
+t1.nit, t1.tpdoc,
+IFNULL(t3.cntRos, 0) AS numRos,
+t2.numReqfiscalia,
+t2.numReqjuzgado,
+t2.numRequiaf,
+t2.totalReq ,
+CASE 
+-- La personas tiene uno o más requerimiento de un Juzgado pasarlo a CRITICO 
+	WHEN t2.numReqjuzgado >= 1 THEN 'MUY ALTO'
+-- La persona  tiene dos requerimiento de la UIAF y no tiene ROS pasar a CRITICO
+	WHEN t2.numRequiaf = 2 AND t3.cntRos = 0 THEN 'MUY ALTO'
+-- La persona tiene tres o más requerimientos de la UIAF independientemente si tiene o no ROS pasar a CRÍTICO            
+	WHEN t2.numRequiaf >= 3 THEN 'MUY ALTO'
+-- La persona tiene dos o más requerimientos de igual o diferentes entes (excepto UIAF) pasar a CRITICO
+	WHEN (t2.totalReq - t2.numRequiaf) >= 2 THEN 'MUY ALTO'
+	ELSE 'MUY BAJO'
+	-- TODO: Y los riesgos intermedios? RIC no deberia usarse tambien?
+END AS riesgoMedios
+FROM
+med_identificadosInfo_g3m_t2_variable_execution_name t1
+LEFT JOIN
+med_REQHIS_g3m_t3_variable_execution_name t2
+ON t1.nit = t2.nit
+LEFT JOIN 
+med_ROS_g3m_t1_variable_execution_name t3
+ON t3.cedula  = t1.nit
+;
+
+-- Riesgo cliente ultima ingestion
+DROP TABLE IF EXISTS med_ric_g3m_t1_variable_execution_name PURGE;
+CREATE TABLE med_ric_g3m_t1_variable_execution_name STORED AS PARQUET AS
+WITH last_ingestion AS (
+select  max(ingestion_year*10000+ingestion_month*100+ingestion_day) as f_maxingest
+        from resultados_cumplimiento.riesgo_integrado_cliente_ric   t2         
+)
+SELECT *
+FROM resultados_cumplimiento.riesgo_integrado_cliente_ric   t2 
+INNER JOIN last_ingestion t1 
+ON t1.f_maxingest = (t2.ingestion_year  * 10000 + 
+                 t2.ingestion_month *   100 + 
+                 t2.ingestion_day)
+;
+--- identificacion de noticiados con nit como clientes o no
+DROP TABLE IF EXISTS med_baseconnitcliente_g3m_t1_variable_execution_name PURGE;
+CREATE TABLE med_baseconnitcliente_g3m_t1_variable_execution_name STORED AS PARQUET AS
+SELECT 
+t2.llave_nombre_cn,
+t1.numerodocumento,t1.tipodocumento,
+CASE WHEN t2.nit_cn IS NOT NULL THEN 1 ELSE 0 END AS ES_CLIENTE
+FROM 
+med_deltaMedios_g3m_t8_variable_execution_name t1
+LEFT JOIN
+-- med_cname_nombres_g3m_e1_variable_execution_name t2
+-- med_clientes_g3m_t2_variable_execution_name t2
+med_clientes_g3m_t3_variable_execution_name t2 -- Para considerar clientes de otras entidades y exclientes con prod. no cancel
+ON CAST(t1.numerodocumento AS BIGINT) = t2.nit_cn AND t1.tipodocumento = t2.tpdoc_cname;
+
+-- Base certificada BEG -- no se esta usando
+-- TODO: Esta base debe estar en zona resultados 
+-- DROP TABLE IF EXISTS med_basecertificadabeg_g3m_t1_variable_execution_name PURGE
+-- CREATE TABLE med_basecertificadabeg_g3m_t1_variable_execution_name STORED AS PARQUET AS
+-- SELECT
+-- id, tipo_id
+-- FROM beg_clientes_gbeg t1
+
+-- Master table para extraer datos demograficos del cliente
+/*
+DROP TABLE IF EXISTS med_masterCostumer_g3m_t1_variable_execution_name PURGE
+CREATE TABLE med_masterCostumer_g3m_t1_variable_execution_name STORED AS PARQUET AS
+WITH last_ingestion AS (
+select  max(year*10000+month*100+ingestion_day) as f_maxingest
+        from resultados_vspc_clientes.master_customer_data           
+)
+SELECT
+llave_sistema AS llave_nombre, 
+num_doc,
+cod_tipo_doc,
+tipo_doc AS nombre_tipo_doc,
+dir_p AS direccion_CLIENTE,
+-- seleccionar alguno de los telefonos disponibles, si son validos, adicionando la extensión si es el caso
+coalesce(
+    if(TRIM(tel1_valido) = 'S',if(ext_tel1 IS null OR TRIM(ext_tel1) = '0' OR TRIM(ext_tel1) = '',tel1, concat(tel1, ' ext:', ext_tel1)),null),
+    if(TRIM(tel2_valido) = 'S',if(ext_tel2 IS null OR TRIM(ext_tel2) = '0' OR TRIM(ext_tel2) = '',tel2, concat(tel2, ' ext:', ext_tel2)),null),
+    concat('cel:',celular1), 
+    concat('cel:', celular2) ) AS TELEFONO_CLIENTE ,
+ciudad_nacim AS CIUDAD_CLIENTE,
+nombre_gte AS GERENTE_DUENO,
+nombre_of AS SUCURSAL,
+dpto_of AS DEPARTAMENTO_SUCURSAL,
+ciudad_of AS CIUDAD_SUCURSAL,
+dir_of AS DIRECCION_SUCURSAL
+
+FROM resultados_vspc_clientes.master_customer_data t2
+INNER JOIN last_ingestion t1 
+        ON t1.f_maxingest = (t2.year  * 10000 + 
+                 t2.month *   100 + 
+                 t2.ingestion_day)         
+
+*/
+
+-- Se mueve a insumoMedios.sql
+-- -------------- Clientes Sensibles -----------------------------------------
+-- -- Los clientes sensibles deben excluirse de la salida a listas de control
+-- -- La premisa es que son clientes y por lo tanto se identifico su id y tipo, asi que estos campos se usaran para el cruce
+-- -- Tomar ultima ingestion de la tabla de clientes sensibles
+-- DROP TABLE IF EXISTS med_sensibles_gmac_t1_variable_execution_name PURGE
+-- CREATE TABLE med_sensibles_gmac_t1_variable_execution_name STORED AS PARQUET AS
+-- WITH last_ingestion AS (
+-- select  max(ingestion_year*10000+ingestion_month*100+ingestion_day) as f_maxingest
+--         from med_clientes_sensibles_gmac
+-- )
+-- SELECT
+-- id_num, tipo_doc, prioridad_nivel_sensibilidad
+-- FROM med_clientes_sensibles_gmac t2
+-- INNER JOIN last_ingestion t1 
+--         ON t1.f_maxingest = (t2.ingestion_year  * 10000 + 
+--                  t2.ingestion_month *   100 + 
+--                  t2.ingestion_day)         
+-- WHERE id_num is not null AND tipo_doc is not null -- Asegurar valores bien formados
+
+
+----------------------------------------------------------------------------
+---------------------------- salidas -----------------------------------------
+--1. BASE_CON_NIT: Contiene los registros que venían con nit y el status de cliente  o no
+DROP TABLE IF EXISTS med_salidabaseconnit_g3m_t1_variable_execution_name PURGE;
+CREATE TABLE med_salidabaseconnit_g3m_t1_variable_execution_name STORED AS PARQUET AS
+SELECT 
+t2.llave_nombre_cn, -- SOLO los clientes tienen llave nombre 
+t1.consecutivo,
+t1.codigo AS codigoint,
+TRIM(CONCAT_WS(" ", IFNULL(t1.PrimerNombre, ''), IFNULL(t1.SegundoNombre, ''), 
+            IFNULL(t1.PrimerApellidooRazonSocial, ''), IFNULL(t1.SegundoApellido, '')))  AS NOMBRE_COMPLETO,
+t1.numerodocumento,
+t1.tipodocumento,
+t1.primernombre,
+t1.segundonombre,
+t1.primerapellidoorazonsocial,
+t1.segundoapellido,
+'NO' AS Homonimia,
+IF (t2.ES_CLIENTE=1, 'SI', 'NO') as ES_CLIENTE,
+IF (t4.nombreProveedor IS NOT NULL, 'SI', 'NO') AS ES_PROVEEDOR,
+IF (t5.nombreAccionista IS NOT NULL, 'SI', 'NO') AS ES_ACCIONISTA,
+IF (t6.empleado = 1, 'SI', 'NO') AS ES_EMPLEADO,
+t1.delitoclean,
+t1.estadoprocesalclean,
+t3.paginaweb AS LINK,
+ --- Marcacion de clientes sensibles
+if(t10.id_num is null, 'NO', 'SI') as cliente_sensible,
+t10.prioridad_nivel_sensibilidad  AS nivel_sensibilidad
+FROM med_deltaMedios_g3m_t8_variable_execution_name t1
+LEFT JOIN
+med_baseconnitcliente_g3m_t1_variable_execution_name t2
+ON t1.numerodocumento = t2.numerodocumento AND t1.tipodocumento = t2.tipodocumento
+LEFT JOIN 
+med_deltaMedios_g3m_t1_variable_execution_name t3
+ON t1.consecutivo = t3.consecutivo
+LEFT JOIN med_proveedores_g3m_t2_variable_execution_name t4
+ON t1.numerodocumento = CAST(t4.nit AS BIGINT) AND t1.tipodocumento = t4.tpdoc_cname
+LEFT JOIN med_accionistas_g3m_t2_variable_execution_name t5
+ON t1.numerodocumento = t5.id AND t1.tipodocumento = t5.tipo 
+LEFT JOIN 
+-- med_clientes_g3m_t1_variable_execution_name t6
+med_clientes_g3m_t3_variable_execution_name t6
+ON t1.numerodocumento = t6.nit_cn AND t1.tipodocumento = t6.tpdoc_cname
+-- marcar clientes sensibles
+LEFT JOIN med_sensibles_gmac_t1_variable_execution_name t10
+ON t1.numerodocumento = t10.id_num AND t1.tipodocumento = t10.tipo_doc
+;
+
+-- Lidiar con posibles duplicados
+DROP TABLE IF EXISTS med_salidabaseconnit_g3m_t2_variable_execution_name PURGE;
+CREATE TABLE  med_salidabaseconnit_g3m_t2_variable_execution_name STORED AS PARQUET AS
+WITH PRE AS (
+SELECT  row_number() over (partition by  consecutivo, numerodocumento, tipodocumento ORDER BY consecutivo) as n, *
+FROM   med_salidabaseconnit_g3m_t1_variable_execution_name
+) 
+SELECT  
+IF(llave_nombre_cn IS NULL, 'NO ES CLIENTE', CAST(llave_nombre_cn AS STRING)) AS llave_nombre,
+consecutivo,
+codigoint,  
+nombre_completo,
+numerodocumento,
+tipodocumento,
+primernombre, 
+segundonombre,
+primerapellidoorazonsocial,
+segundoapellido,
+homonimia,
+es_cliente,
+es_proveedor,
+es_accionista,
+ES_EMPLEADO,
+delitoclean,
+estadoprocesalclean,
+cliente_sensible,
+nivel_sensibilidad,
+link
+FROM pre t1
+WHERE n = 1
+;
+
+-- 2. SALIDA_BASE_HOMONIMIA: Conjunto de clientes identificados por la coincidencia de nombres y variables adicionales para decidir si es o no la persona
+DROP TABLE IF EXISTS med_salidabasehomonimia_g3m_t1_variable_execution_name PURGE;
+CREATE TABLE med_salidabasehomonimia_g3m_t1_variable_execution_name STORED AS PARQUET AS
+SELECT 
+t1.codigo,
+t1.consecutivo, t1.llave_nombre_cn,  t1.nit, t1.tpdoc,
+--- Coincidencia nombre
+t1.nombre_target, t1.nombreenmedios,  t1.distancianombres,  t1.similitud,
+--- Nombres origen
+t1.primernombre,
+t1.segundonombre,
+t1.primerapellidoorazonsocial,
+t1.segundoapellido,
+--- Variables relevantes decision
+t2.tipopersonaclean,
+-- Edad
+t1.edad AS edadReportadaMedio,
+t2.estadoEdad,t2.edad_cindv AS edadEstimBanco,
+-- Jurisdicciones
+-- t2.cod_juris_ofgestion, t2.cod_juris_noticia,
+-- jurisdicciones nombres
+t2.nombre_ciudad_noticia,
+t2.ciudad_of,
+t2.nombre_ciudad_dirp,
+t2.ciudad_nacim,
+t2.nombre_ciudad_trx,
+-- jurisdicciones codigos
+t2.cod_juris_noticia,
+t2.cod_juris_ofgestion,
+t2.cod_ciudad_dirp,
+t2.cod_ciudad_nacim,
+t2.cod_ciudad_trx,
+
+t2.tiene_ros, t2.tiene_alertas,
+t2.tiene_req,
+t2.ES_PEP,
+t2.TIENE_INFO_USO_PUBLICO,
+t2.tiene_reldirect,
+-- Cliente o empleado
+t1.cliente, t1.Proveedor,
+t1.accionista, t1.empleado,
+
+------ DECISION-------
+t2.decisionpersona, t2.causadecision,
+
+--- Variables para calcular Riesgo Medios
+t4.numRos,
+t4.numReqfiscalia,
+t4.numReqjuzgado,
+t4.numRequiaf,
+t4.totalReq ,
+-- Riesgo
+t4.riesgoMedios
+
+FROM
+med_identificados_g3m_l2_variable_execution_name t1 
+LEFT JOIN
+med_DecisionPersona_g3m_t1_variable_execution_name  t2
+-- ON t1.llave_nombre_cn = t2.llave_nombre_cn
+ON t1.nit=t2.nit AND  t1.tpdoc = t2.tpdoc
+LEFT JOIN
+med_riesgoMedios_g3m_t1_variable_execution_name t4
+-- ON t1.llave_nombre_cn = t4.llave_nombre_cn
+ON t1.nit=t4.nit AND  t1.tpdoc = t4.tpdoc
+;
+
+-- Eliminando duplicados de homonimia
+-- TODO: Mejorar cruce previo para evitar este paso
+DROP TABLE IF EXISTS med_salidabasehomonimia_g3m_t2_variable_execution_name PURGE;
+CREATE TABLE  med_salidabasehomonimia_g3m_t2_variable_execution_name STORED AS PARQUET AS
+WITH PRE AS (
+SELECT  row_number() over (partition by llave_nombre_cn, consecutivo, nit, tpdoc, nombre_target, nombreenmedios ORDER by consecutivo) as n, *
+FROM  med_salidabasehomonimia_g3m_t1_variable_execution_name 
+) SELECT 
+consecutivo AS CODIGOINT, -- antes , en sas, se usaba la fecha concatenada con el consecutivo
+CODIGO,
+t1.llave_nombre_cn,   t1.tpdoc, -- se añaden estos campos para completar identificación del cliente
+CAST(NIT AS BIGINT) AS NIT,
+CONCAT_WS(" ", IFNULL(t1.PrimerNombre, ''), IFNULL(t1.SegundoNombre, ''), 
+            IFNULL(t1.PrimerApellidooRazonSocial, ''), IFNULL(t1.SegundoApellido, ''))  AS NOMBRE_COMPLETO,
+t1.PrimerNombre AS PRIMER_NOMBRE,
+t1.SegundoNombre AS SEGUNDO_NOMBRE,
+t1.PrimerApellidooRazonSocial AS PRIMER_APELLIDO_RAZON_SOCIAL,
+t1.SegundoApellido AS SEGUNDO_APELLIDO,
+IF(IFNULL(t1.tiene_alertas, 0) > 0,'SI', 'NO') AS TIENE_ALERTAS,
+-- Jurisdicciones
+t1.cod_juris_noticia AS COD_DANE_NOTICIA,
+t1.cod_juris_ofgestion AS COD_DANE_GESTION,
+IF (t1.cod_juris_noticia = t1.cod_juris_ofgestion, 1, 0) AS IGUALDAD_JURISDICCION_GESTION,
+t1.cod_ciudad_dirp AS COD_DANE_RESIDENCIA,
+IF (t1.cod_juris_noticia = t1.cod_ciudad_dirp, 1, 0) AS IGUALDAD_JURISDICCION_RESIDENCIA,
+t1.cod_ciudad_trx AS COD_DANE_TRANSACCION,
+IF (t1.cod_juris_noticia = t1.cod_ciudad_trx , 1, 0) IGUALDAD_JURISDICCION_TRANSACCIO,
+t1.cod_ciudad_nacim AS COD_DANE_NACIMIENTO,
+IF (t1.cod_juris_noticia = t1.cod_ciudad_nacim , 1, 0) IGUALDAD_JURISDICCION_NACIMIENTO,
+IF (t1.causaDecision LIKE "%jurisdic%", 1, 0) AS JURISDICCION, -- Si todas las jurisdicciones coinciden 
+-- edad
+t1.edadReportadaMedio AS EdadN,
+t1.edadEstimBanco AS EDAD,
+t1.estadoEdad AS AJUSTA_EDAD,
+0 AS TIENE_MEDIO_COMUNICACION, -- TODO: Calcular
+ES_PEP,
+t1.tiene_reldirect AS TIENE_RELACIONADO,
+t1.tiene_req AS TIENE_REQUERIMIENTOS,
+TIENE_ROS,
+t1.TIENE_INFO_USO_PUBLICO,  
+IF(t1.tipopersonaclean LIKE "%juri%", 'SI', 'NO') as ES_JURIDICA,
+IF(t1.cliente= 1, 'SI', 'NO') AS ES_CLIENTE,
+IF(t1.Proveedor= 1, 'SI', 'NO') AS ES_PROVEEDOR,
+IF(t1.accionista= 1, 'SI', 'NO') AS ES_ACCIONISTA,
+IF(t1.Empleado= 1, 'SI', 'NO') AS ES_EMPLEADO,
+t1.decisionpersona AS RESULTADO_HOMONIMIA,
+t1.causaDecision AS RESULTADO_HOMONIMIA_CAUSA,
+
+IFNULL(t1.numRos, 0) as NUM_ROS,
+IFNULL(t1.numReqfiscalia, 0) AS NUM_FISCALIA,
+-- Variables calculo riesgo medios
+IFNULL(t1.numReqjuzgado, 0) AS NUM_REQ_JUZ,
+IFNULL(t1.numRequiaf, 0) AS NUM_REQ_UIAF,
+IFNULL(t1.totalReq, 0) AS TOTAL_REQ,
+riesgoMedios AS RIESGO_TOTAL -- TODO: Creo que deberia usarse RIC
+
+FROM pre t1
+WHERE n = 1;
+
+
+-- 3. SALIDA_CONSOLIDADA: contiene los  identificados que SON LA PERSONA + los que vienen con nit + NO SON LA PERSONA pero riesgo ALTO
+
+-- Asignar decision a los registros procesados por nombre  identificados
+DROP TABLE IF EXISTS med_identificados_g3m_l3_variable_execution_name PURGE;
+CREATE TABLE med_identificados_g3m_l3_variable_execution_name STORED AS PARQUET AS 
+SELECT 
+t1.*,
+t2.decisionpersona
+FROM med_identificados_g3m_l2_variable_execution_name t1 
+LEFT JOIN
+med_DecisionPersona_g3m_t1_variable_execution_name  t2
+ON t1.llave_nombre_cn = t2.llave_nombre_cn
+;
+--  Asignar decision SI ES LA PERSONA  a registros con nit que son clientes proveedores o accionistas
+DROP TABLE IF EXISTS med_salidabaseconnit_g3m_t12_variable_execution_name PURGE;
+CREATE TABLE med_salidabaseconnit_g3m_t12_variable_execution_name STORED AS PARQUET AS 
+SELECT 
+t1.*,
+'SI ES LA PERSONA' AS decisionpersona -- Si viene con nit y es cliente, proveedor o accionista SI ES LA PERSONA
+FROM med_salidabaseconnit_g3m_t1_variable_execution_name t1
+WHERE es_cliente = 'SI' or es_accionista = 'SI' or es_proveedor = 'SI'
+;
+
+-- Adicionar a los identificados aquellos que llegaron con nit y son clientes
+DROP TABLE IF EXISTS med_nitplusIdentificados_g3m_t1_variable_execution_name PURGE;
+CREATE TABLE med_nitplusIdentificados_g3m_t1_variable_execution_name STORED AS PARQUET AS 
+SELECT 
+t1.llave_nombre_cn, -- si fue identificado se garantiza tiene llave-nombre
+t1.tpdoc,
+t1.nit,
+t1.PrimerNombre,
+t1.SegundoNombre,
+t1.PrimerApellidooRazonSocial,
+t1.SegundoApellido,
+t1.consecutivo,
+t1.codigo,
+t1.cliente,
+t1.Proveedor,
+t1.accionista,
+t1.empleado,
+t1.tipodedelito  ,
+t1.estadoprocesal  ,
+t1.decisionpersona
+-- FROM med_identificados_g3m_l2_variable_execution_name t1 
+FROM med_identificados_g3m_l3_variable_execution_name t1 
+UNION ALL 
+SELECT
+-- t2.llave_nombre_cn, -- solo si se usa filtro de cliente
+-- si no tiene llave nombre (pero es persona de interes) se crea una llave concatenando tipoid, id y consecutivo
+ifnull(t2.llave_nombre_cn,
+cast(concat(cast(t2.tipodocumento as STRING),cast( t2.numerodocumento as STRING), cast( t2.consecutivo as STRING)) as BIGINT)
+),
+t2.tipodocumento AS tpdoc,
+t2.numerodocumento AS nit,
+t2.PrimerNombre,
+t2.SegundoNombre,
+t2.PrimerApellidooRazonSocial,
+t2.SegundoApellido,
+t2.consecutivo,
+t2.codigoint AS codigo,
+IF(t2.ES_CLIENTE = 'SI',1,0) AS cliente,
+IF(t2.ES_PROVEEDOR = 'SI',1,0) AS Proveedor,
+IF(t2.ES_ACCIONISTA= 'SI',1,0) AS Accionista,
+IF(t2.ES_EMPLEADO = 'SI',1,0) AS Empleado,
+-- IF(t3.llave_nombre_cn IS NOT NULL, 1, 0) AS Accionista,
+-- '' AS Empleado, -- TODO: calcular
+t2.delitoclean AS tipodedelito  ,
+t2.estadoprocesalclean as estadoprocesal,
+t2.decisionpersona
+-- FROM med_salidabaseconnit_g3m_t1_variable_execution_name t2
+FROM med_salidabaseconnit_g3m_t12_variable_execution_name t2
+-- LEFT JOIN 
+-- med_accionistas_g3m_t2_variable_execution_name t3
+-- ON t3.llave_nombre_cn = CAST(t2.llave_nombre_cn AS BIGINT)
+-- solo añadir a la salida consolidada los que tienen nit y son clientes
+-- WHERE t2.ES_CLIENTE = 'SI'
+;
+
+--- Obtener clientes en estado DESVINCULAR en listas de control
+DROP TABLE IF EXISTS med_desvincularlc_g3m_t1_variable_execution_name PURGE;
+CREATE TABLE med_desvincularlc_g3m_t1_variable_execution_name STORED AS PARQUET AS 
+WITH last_ingestion AS (
+select  max(year*10000+month*100+day) as f_maxingest
+        -- from lc_listctrb_g3ma t2      
+        FROM resultados_cumplimiento.lc_bancolombia t2           
+)
+SELECT t2.num_doc as doc, t2.tip_doc, t2.cod_area_lc, t2.cod_categ_lc , t2.cod_subcateg_lc,
+t3.llave_nombre_cn,
+'SI' AS desvincular 
+-- SELECT COUNT(*) -- 32K
+-- FROM lc_listctrb_g3ma t2
+FROM resultados_cumplimiento.lc_bancolombia t2           
+INNER JOIN 
+last_ingestion t1
+ON t1.f_maxingest = (t2.year  * 10000 + 
+                 t2.month *   100 + 
+                 t2.day)
+RIGHT JOIN
+med_nitplusIdentificados_g3m_t1_variable_execution_name t3 
+ON 
+t3.nit = t2.num_doc AND t2.tip_doc = t3.tpdoc
+WHERE 
+t2.cod_categ_lc = 1 -- OFAC 
+OR 
+t2.cod_categ_lc = 21 -- ONU
+OR 
+(t2.cod_categ_lc = 23  AND (t2.cod_subcateg_lc = 1)) -- DESVINCULAR:23-1
+OR
+(t2.cod_categ_lc = 2  AND ( t2.cod_subcateg_lc = 25)) -- EXTRADITADOS:25
+AND 
+UPPER(TRIM(t2.est_lc)) = 'V'
+;
+
+DROP TABLE IF EXISTS med_salidaconsolidado_g3m_t1_variable_execution_name PURGE;
+CREATE TABLE med_salidaconsolidado_g3m_t1_variable_execution_name STORED AS PARQUET AS 
+   SELECT 
+          --t1.consecutivo,
+         /* ID_CLIENTE */
+          t1.tpdoc AS TIPO_ID_CLIENTE,
+          t1.nit AS ID_CLIENTE, 
+          -- nombres --
+          CONCAT_WS(" ", IFNULL(t1.PrimerNombre, ''), IFNULL(t1.SegundoNombre, ''), 
+            IFNULL(t1.PrimerApellidooRazonSocial, ''), IFNULL(t1.SegundoApellido, '')) AS NOMB_CLIENTE,
+          t1.PrimerNombre AS PRIMER_NOMB, 
+          t1.SegundoNombre AS SEGUNDO_NOMB, 
+          t1.PrimerApellidooRazonSocial AS PRIMER_APELL, 
+          t1.SegundoApellido AS SEGUNDO_APELL,
+          /* OBSERVACIONES */
+          CONCAT("El cliente " ,
+            CONCAT_WS(" ", IFNULL(t1.PrimerNombre, ''), IFNULL(t1.SegundoNombre, ''), 
+              IFNULL(t1.PrimerApellidooRazonSocial, ''), IFNULL(t1.SegundoApellido, '')),
+          " con el numero de identificacion " ,CAST(t1.nit as STRING),
+          " fue mencionado en un medio de comunicacion, el detalle de esta mencion puede encontrarse en la noticia con consecutivo: " 
+          ,CAST(t1.consecutivo AS STRING), ". La pagina web de la noticia: ", paginaweb) AS OBSERVACIONES, 
+          -- FECHA ALERTA
+          CAST(NOW() AS STRING) AS FECHA_ALER, 
+          --CASE WHEN t1.tipopersona LIKE '%natural%' THEN 0 ELSE 1 END AS TIPO_PERSONA,
+          ifnull(t3.entidad, 'Unknown')  AS FILIAL, 
+          --'' AS ESTADO , -- TODO: Estado de que?
+		  t3.segmento AS  txtCodSegmento,
+          --'' AS txtCodSegmentoOriginal, -- TODO ?
+          CONCAT(CAST(YEAR( NOW()) AS STRING), lpad(CAST(MONTH(NOW()) AS STRING), 2, '0')) AS txtPeriodoAlerta,
+          'MMCOM' AS txtCodModeloMD,
+          CONCAT(CAST(YEAR( NOW()) AS STRING), lpad(CAST(MONTH(NOW()) AS STRING), 2, '0')) AS Fecha_de_Generacion,
+          /* Centro de gravedad */
+          -- Si el delito esta asociado a LAFT -> A: Antilavado, 
+          -- si el delito es de corrupción y es (cliente, Empleado o Proveedor de canal) ent. C: Corrupción
+          -- si el delito es de corrupción y es (Proveedor, Aliado o Accionistas) ent. E: Etica
+          -- TODO: Incluir otros actores (aliado , canal)
+            CASE 
+              WHEN t5.tipo = 'LAFT' THEN 'A' 
+              WHEN t5.tipo = 'CORRUPCION' AND t1.cliente = 1 THEN 'C' -- cliente incluye empleados ya que todos empleado es cliente
+              WHEN t5.tipo = 'CORRUPCION' AND (t1.Proveedor = 1 OR t1.accionista = 1) THEN 'E'
+            ELSE 'Uknown' END 
+               AS Centro_gravedad, 
+          /* Gerencia */
+            ('') AS Gerencia, -- TODO: DEFINICION PENDIENTE
+          /* Cliente proveedor o accionista? */
+            IF (t1.cliente = 1, 'SI', 'NO') AS Cliente, 
+            IF (t1.Proveedor = 1, 'SI', 'NO') AS Proveedor, 
+            IF (t1.accionista = 1, 'SI', 'NO') AS Accionista, 
+            IF (t1.empleado = 1, 'SI', 'NO') AS Empleado, 
+          /* Gestiones */
+            (' ' ) AS Gestiones, -- TODO: ?
+          /* Homonimia */
+          IFNULL(t1.decisionpersona,'Unknown') AS Homonimia, 
+          UPPER(t1.tipodedelito)  AS Delito, 
+          UPPER(t1.estadoprocesal)  AS Estado_Delito, 
+          t4.riesgoMedios AS calificacion,           
+          /* Situacion Juridica */
+          t6.Situacion_juridica,
+          
+          /* RESULTADO HOMONIMIA GESTION */     
+          (' ' ) AS RESULTADO_HOMONIMIA_GESTION, 
+          
+          t8.DIRECCION_CLIENTE,
+          t8.TELEFONO_CLIENTE,
+          t8.CIUDAD_CLIENTE,
+          t8.GERENTE_DUENO,
+          t8.SUCURSAL,
+          t8.DEPARTAMENTO_SUCURSAL,
+          t8.CIUDAD_SUCURSAL ,
+          t8.DIRECCION_SUCURSAL,  
+          (' ') AS INDICATIVO ,          
+          (' ') AS TELEFONO_SUCURSAL ,
+          (' ') AS OBSERVACIONESG  ,
+          (' ') AS DECISION_EN_GESTOR_DE_CIERRE  ,
+          (' ') AS FECHA_CIERRE  ,
+          (' ') AS ANALISTA  ,
+          (' ') AS CASO_GESTOR, 
+          (' ') AS CASOS_INFORME_DE_JUNTA  ,
+          (' ') AS ROS,
+            
+          -- Desvincular segun listas de control
+          IF(t9.desvincular IS NULL, 'NO', 'SI')    AS DESVINCULAR,
+          
+          (' ') AS NORMALIZADO ,
+
+          CASE 
+            WHEN t1.codigo LIKE "%GA%" THEN 'GUATEMALA'
+            WHEN t1.codigo LIKE "%SA%" THEN 'BANCO AGRICOLA'
+            WHEN t1.codigo LIKE "%PA%" THEN 'BANITSMO'
+            WHEN t1.codigo LIKE "%DA%" THEN 'DIRECCION_ANTILAVADO'
+            ELSE 'INFOLAFT'
+          END  AS  FUENTE,
+         
+          t7.ric_total_cuantitativo AS RIESGO_TOTAL,
+
+          --- Marcacion de clientes sensibles
+          if(t10.id_num is null, 'NO', 'SI') as cliente_sensible,
+          t10.prioridad_nivel_sensibilidad AS nivel_sensibilidad
+          
+          
+      FROM 
+      --med_identificados_g3m_l2_variable_execution_name t1 
+      med_nitplusIdentificados_g3m_t1_variable_execution_name t1
+      -- LEFT JOIN
+      -- med_DecisionPersona_g3m_t1_variable_execution_name  t2
+      -- ON t1.llave_nombre_cn = t2.llave_nombre_cn
+      LEFT JOIN
+      -- med_cname_nombres_g3m_e1_variable_execution_name t3
+      -- med_clientes_g3m_t2_variable_execution_name t3
+      med_clientes_g3m_t3_variable_execution_name t3
+      -- ON t1.llave_nombre_cn = t3.llave_nombre_cn
+      ON t3.nit_cn = t1.nit AND t3.tpdoc_cname = t1.tpdoc -- llave nombre en t3 solo aplica para clientes Bancolombia no filiales
+      LEFT JOIN
+      med_riesgoMedios_g3m_t1_variable_execution_name T4
+      ON t1.llave_nombre_cn = t4.llave_nombre_cn
+      --LEFT JOIN med_baseconnitcliente_g3m_t1_variable_execution_name t5
+      --ON t1.nit = t5.nit_cn
+      INNER JOIN med_delitos_g3m_t1_variable_execution_name t5
+      ON regexp_replace(
+      regexp_replace(
+      regexp_replace(
+      regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(
+      LOWER(t1.tipodedelito) , 
+      "[áàÀâÂãäÁÃÄ]", "a"), "[éèÈêÊëÉË]","e"), "[íìÌýÝîÎïÍÏÿŸ]", "i"), "[óòÒôÔõöÓÕÖ]", "o"), "[úùÙûÛüÚÜ]", "u") --- vocales acentuadas
+      , '[#Ñ]','ñ') --- eñes permanecen en minuscula
+      , '[[:space:]]','') --- eliminar espacios
+      , '[^A-zñ][\\\^]?','')= t5.delitos
+      LEFT JOIN
+      med_deltaMedios_g3m_t3_variable_execution_name t6
+      ON t1.consecutivo = t6.consecutivo
+      -- Tabla de riesgo RIC
+      LEFT JOIN  med_ric_g3m_t1_variable_execution_name t7
+      ON t1.nit = t7.id AND t1.tpdoc = 1 -- TODO: Garantizar que la tabla RIC tenga tipo doc o llave_nombre para que este cruce sea correcto
+      -- tabla customerData para extraer datos demograficos
+      LEFT JOIN med_masterCostumer_g3m_t1_variable_execution_name t8
+      ON t1.llave_nombre_cn = t8.llave_nombre
+      -- TODO: Como se adiciono antes a los de nit el cruce dara nulo en campo de decision. Mejorar esto haciendo quiza la union despues
+      LEFT JOIN med_desvincularlc_g3m_t1_variable_execution_name t9
+      ON t9.llave_nombre_cn = t1.llave_nombre_cn
+      --- Clientes sensibles
+      LEFT JOIN med_sensibles_gmac_t1_variable_execution_name t10
+      ON t1.nit = t10.id_num AND t1.tpdoc = t10.tipo_doc
+
+      WHERE (
+                 (t1.decisionpersona = 'SI ES LA PERSONA' OR t1.decisionpersona IS NULL) OR 
+                 (t1.decisionpersona = 'NO ES LA PERSONA' AND (( 
+                 t4.riesgoMedios='MUY ALTO') OR ( t4.riesgoMedios='ALTO')))
+           ) 
+      
+      ;
+
+-- Eliminando duplicados de consolidado
+-- TODO: Mejorar cruce previo para evitar este paso
+DROP TABLE IF EXISTS med_salidaconsolidado_g3m_t2_variable_execution_name PURGE;
+CREATE TABLE  med_salidaconsolidado_g3m_t2_variable_execution_name STORED AS PARQUET AS
+WITH PRE AS (
+SELECT  row_number() over (partition by  id_cliente , tipo_id_cliente ORDER by id_cliente) as n, *
+FROM  med_salidaconsolidado_g3m_t1_variable_execution_name 
+) SELECT 
+TIPO_ID_CLIENTE, 
+CAST(ID_CLIENTE AS BIGINT) AS ID_CLIENTE,  
+NOMB_CLIENTE,  
+PRIMER_NOMB, 
+SEGUNDO_NOMB,  
+PRIMER_APELL,  
+SEGUNDO_APELL, 
+OBSERVACIONES,
+FECHA_ALER,
+FILIAL,  
+txtCodSegmento,  
+txtPeriodoAlerta,
+txtCodModeloMD,
+Fecha_de_Generacion,
+Centro_gravedad,  
+Gerencia,  
+Cliente,
+Proveedor,
+accionista,
+empleado,
+Gestiones ,
+Homonimia, 
+Delito,  
+Estado_Delito,
+calificacion,  
+Situacion_Juridica,  
+RESULTADO_HOMONIMIA_GESTION ,
+DIRECCION_CLIENTE, 
+TELEFONO_CLIENTE  ,
+CIUDAD_CLIENTE,  
+GERENTE_DUENO, 
+SUCURSAL,
+DEPARTAMENTO_SUCURSAL, 
+CIUDAD_SUCURSAL ,
+DIRECCION_SUCURSAL,  
+INDICATIVO, 
+TELEFONO_SUCURSAL ,
+OBSERVACIONESG ,
+DECISION_EN_GESTOR_DE_CIERRE,  
+FECHA_CIERRE,  
+ANALISTA , 
+CASO_GESTOR ,
+CASOS_INFORME_DE_JUNTA , 
+ROS, 
+DESVINCULAR, 
+NORMALIZADO ,
+FUENTE,  
+RIESGO_TOTAL,
+cliente_sensible,
+nivel_sensibilidad
+
+FROM pre 
+WHERE n = 1
+ORDER BY NOMB_CLIENTE;
+
+     
+
+-- 7. SALIDA_ALERTAS: Registros a evaluar ->  Coinciden con clientes y se piensa que SI ES LA PERSONA o su riesgo es ALTO o MUY ALTO O VIENEN con nit y son personas de interes
+DROP TABLE IF EXISTS med_salidaalertas_g3m_t1_variable_execution_name PURGE;
+CREATE TABLE med_salidaalertas_g3m_t1_variable_execution_name STORED AS PARQUET AS
+SELECT 
+0 AS id_alerta,
+/* NRO_ALERTA */
+('0') AS NRO_ALERTA, 
+/* NIVEL_RIESGO */
+('600') AS NIVEL_RIESGO, 
+/* COD_REPORTE */
+('CLI') AS COD_REPORTE, 
+/* CNNOSS */
+lpad(CAST(t0.llave_nombre_cn AS STRING), 14, '0') AS CNNOSS, 
+/* ID_CLIENTE */
+cast(t0.nit as bigint) AS ID_CLIENTE, t0.tpdoc AS TIPO_ID_CLIENTE,
+-- nombres --
+t0.PrimerNombre AS PRIMER_NOMB, 
+t0.SegundoNombre AS SEGUNDO_NOMB, 
+t0.PrimerApellidooRazonSocial AS PRIMER_APELL, 
+t0.SegundoApellido AS SEGUNDO_APELL,
+/* OBSERVACIONES */
+CONCAT("El cliente " ,t1.nombreenmedios, " con el numero de identificacion " ,CAST(t1.nit as STRING),
+" fue mencionado en un medio de comunicacion, el detalle de esta mencion puede encontrarse en la(s) noticia(s) con codigo(s): " 
+,CAST(t1.consecutivo AS STRING)) AS OBSERVACIONES, 
+-- FECHA ALERTA
+CAST(NOW() AS STRING) AS FECHA_ALERTA, 
+CASE WHEN t1.tipopersona LIKE '%natural%' THEN 0 ELSE 1 END AS TIPO_PERSONA,
+CASE 
+  WHEN t1.codigo LIKE "%GA%" THEN 'GUATEMALA'
+  WHEN t1.codigo LIKE "%SA%" THEN 'BANCO AGRICOLA'
+  WHEN t1.codigo LIKE "%PA%" THEN 'BANITSMO'
+  ELSE 'BANCOLOMBIA'
+END  AS FILIAL, 
+'' AS ESTADO , -- TODO: Estado de que?
+t3.segmento AS  txtCodSegmento,
+'' AS txtCodSegmentoOriginal, -- TODO ?
+CONCAT(CAST(YEAR( NOW()) AS STRING), lpad(CAST(MONTH(NOW()) AS STRING), 2, '0')) AS txtPeriodoAlerta,
+'MMCOM' AS txtCodModeloMD,
+1 AS intCodAlerta,
+'' AS dtmExportacion,0 AS  MONTO_ALERTA, '' AS  CASE_GROUP
+
+FROM 
+med_nitplusIdentificados_g3m_t1_variable_execution_name t0
+LEFT JOIN 
+med_identificados_g3m_t1_variable_execution_name t1 
+ON t0.tpdoc = t1.tpdoc AND t0.nit = t1.nit
+LEFT JOIN
+med_DecisionPersona_g3m_t1_variable_execution_name  t2
+ON t1.llave_nombre_cn = t2.llave_nombre_cn
+LEFT JOIN
+-- med_cname_nombres_g3m_e1_variable_execution_name t3
+-- med_clientes_g3m_t2_variable_execution_name t3
+med_clientes_g3m_t3_variable_execution_name t3
+-- ON t1.llave_nombre_cn = t3.llave_nombre_cn
+ON t3.nit_cn = t1.nit AND t3.tpdoc_cname = t1.tpdoc -- llave nombre en t3 solo aplica para clientes Bancolombia no filiales
+LEFT JOIN
+med_riesgoMedios_g3m_t1_variable_execution_name T4
+ON t1.llave_nombre_cn = t4.llave_nombre_cn
+--LEFT JOIN med_baseconnitcliente_g3m_t1_variable_execution_name t5
+--ON t1.nit = t5.nit_cn
+WHERE (
+           (t2.decisionpersona = 'SI ES LA PERSONA') OR 
+           (t2.decisionpersona = 'NO ES LA PERSONA' AND (( 
+           t4.riesgoMedios='MUY ALTO') OR ( t4.riesgoMedios='ALTO')))
+     ) 
+--AND t5.ES_CLIENTE = 1
+;
+
+DROP TABLE IF EXISTS med_salidaalertas_g3m_t2_variable_execution_name PURGE;
+CREATE TABLE  med_salidaalertas_g3m_t2_variable_execution_name STORED AS PARQUET AS
+WITH PRE AS (
+SELECT  row_number() over (partition by cnnoss, id_cliente , tipo_id_cliente ORDER by id_cliente) as n, *
+FROM  med_salidaalertas_g3m_t1_variable_execution_name 
+) SELECT *
+FROM pre 
+WHERE n = 1;
+
+-- . BASE_CON_NIT_PN : Se añade decisión sobre categoría y subcategoría de LC 
+
+DROP TABLE IF EXISTS med_salidaconnitPN_g3m_t1_variable_execution_name PURGE;
+CREATE TABLE med_salidaconnitPN_g3m_t1_variable_execution_name STORED AS PARQUET AS
+SELECT
+CAST(t2.numerodocumento AS BIGINT) AS numerodocumento, 
+t2.consecutivo,
+t1.delitoclean, t1.estadoprocesalclean, t1.tipopersonaclean,
+
+(CASE
+WHEN lower(t1.estadoprocesalclean) LIKE '%extraditado%' AND t3.ES_CLIENTE=1 THEN 'SUBIR LC 02 SUBCAT 25'
+WHEN lower(t1.estadoprocesalclean) LIKE '%extraditado%' AND t3.ES_CLIENTE=0 THEN 'SUBIR LC 09 SUBCAT 08'
+WHEN lower(t1.estadoprocesalclean) LIKE '%condenado%' AND t3.ES_CLIENTE=1 THEN 'SUBIR LC 02 SUBCAT 26'
+WHEN lower(t1.estadoprocesalclean) LIKE '%condenado%' AND t3.ES_CLIENTE=0 THEN 'SUBIR LC 09 SUBCAT 01'
+WHEN t3.ES_CLIENTE=1 AND (t4.riesgoMedios = 'MUY ALTO' OR t4.riesgoMedios = 'ALTO') THEN 'SUBIR LC 02 SUBCAT 26'
+WHEN t3.ES_CLIENTE=1 AND (t4.riesgoMedios <> 'MUY ALTO' OR t4.riesgoMedios <> 'ALTO') THEN 'SUBIR LC 05 SUBCAT 27'
+ELSE 'SUBIR LC 09 SUBCAT 01'
+END) AS ACCION
+FROM  med_deltaMedios_g3m_t8_variable_execution_name t1
+LEFT JOIN
+med_salidabaseconnit_g3m_t1_variable_execution_name t2
+ON t1.numerodocumento  = t2.numerodocumento
+LEFT JOIN
+med_baseconnitcliente_g3m_t1_variable_execution_name t3
+ON t1.numerodocumento  = t3.numerodocumento  
+LEFT JOIN
+med_riesgoMedios_g3m_t1_variable_execution_name T4
+ON CAST(t1.numerodocumento AS BIGINT)=t4.nit
+WHERE t1.tipopersonaclean LIKE "%natural%" AND
+t2.cliente_sensible ='NO'
+;
+
+-- .  BASE_CON_NIT_PJ: Se añade decisión sobre categoría y subcategoría de LC
+--- TODO: Excluir los sensibles
+DROP TABLE IF EXISTS med_salidaconnitPJ_g3m_t1_variable_execution_name PURGE;
+CREATE TABLE med_salidaconnitPJ_g3m_t1_variable_execution_name STORED AS PARQUET AS
+SELECT
+CAST(t2.numerodocumento AS BIGINT) AS numerodocumento, t2.consecutivo,
+t1.delitoclean, t1.estadoprocesalclean, t1.tipopersonaclean,
+
+(CASE
+WHEN t1.estadoprocesalclean LIKE '%extraditado%' AND t3.ES_CLIENTE=1 THEN 'SUBIR LC 02 SUBCAT 25'
+WHEN t1.estadoprocesalclean LIKE '%extraditado%' AND t3.ES_CLIENTE=0 THEN 'SUBIR LC 09 SUBCAT 08'
+WHEN t1.estadoprocesalclean LIKE '%condenado%' AND t3.ES_CLIENTE=1 THEN 'SUBIR LC 02 SUBCAT 26'
+WHEN t1.estadoprocesalclean LIKE '%condenado%' AND t3.ES_CLIENTE=0 THEN 'SUBIR LC 09 SUBCAT 01'
+WHEN t3.ES_CLIENTE=1 AND (t4.riesgoMedios = 'MUY ALTO' OR t4.riesgoMedios = 'ALTO') THEN 'SUBIR LC 02 SUBCAT 26'
+WHEN t3.ES_CLIENTE=1 AND (t4.riesgoMedios <> 'MUY ALTO' OR t4.riesgoMedios <> 'ALTO') THEN 'SUBIR LC 05 SUBCAT 27'
+ELSE 'SUBIR LC 09 SUBCAT 01'
+END) AS ACCION
+FROM  med_deltaMedios_g3m_t8_variable_execution_name t1
+LEFT JOIN
+med_salidabaseconnit_g3m_t1_variable_execution_name t2
+ON t1.numerodocumento  = t2.numerodocumento
+LEFT JOIN
+med_baseconnitcliente_g3m_t1_variable_execution_name t3
+ON CAST(t1.numerodocumento AS BIGINT) = t3.numerodocumento
+LEFT JOIN
+med_riesgoMedios_g3m_t1_variable_execution_name T4
+ON CAST(t1.numerodocumento AS BIGINT)=t4.nit
+WHERE t1.tipopersonaclean LIKE "%juridi%" AND
+t2.cliente_sensible <> 'SI' 
+;
+
+/*
+DROP TABLE IF EXISTS med_salidaconnitPNPJ_g3m_t2_variable_execution_name PURGE
+CREATE TABLE med_salidaconnitPNPJ_g3m_t2_variable_execution_name STORED AS PARQUET AS
+SELECT
+t1.consecutivo,
+t1.numerodocumento, t1.tipopersonaclean, t1.ACCION,
+
+(CASE
+WHEN t6.id IS NOT null THEN '05' -- si el cliente esta en base de BEG poner categoria 5
+WHEN t1.ACCION='SUBIR LC 02 SUBCAT 25' THEN '02'
+WHEN t1.ACCION='SUBIR LC 02 SUBCAT 26' THEN '02'
+WHEN t1.ACCION='SUBIR LC 05 SUBCAT 27' THEN '05'
+WHEN t1.ACCION='SUBIR LC 09 SUBCAT 01' THEN '09'
+WHEN t1.ACCION='SUBIR LC 09 SUBCAT 08' THEN '09'
+
+END) AS CATEGORIA, 
+
+(CASE
+WHEN t6.id IS NOT null THEN '27' -- si el cliente esta en base de BEG poner subcategoria 27
+WHEN t1.ACCION='SUBIR LC 02 SUBCAT 25' THEN '25'
+WHEN t1.ACCION='SUBIR LC 09 SUBCAT 08' THEN '08'
+WHEN t1.ACCION='SUBIR LC 02 SUBCAT 26' THEN '26'
+WHEN t1.ACCION='SUBIR LC 09 SUBCAT 01' THEN '01'
+WHEN t1.ACCION='SUBIR LC 05 SUBCAT 27' THEN '27'
+END) AS SUBCATEGORIA, 
+
+CONCAT('PRENSA NEGATIVA -' ,t1.estadoprocesalclean,'-',t1.delitoclean) AS MOTIVO
+FROM med_salidaconnitPNPJ_g3m_t1_variable_execution_name t1
+LEFT JOIN
+med_basecertificadabeg_g3m_t1_variable_execution_name t6 
+ON t1.numerodocumento = t6.id-- TODO: Añadir cruce con tipo doc
+
+
+*/
+
+--  consecutivo y nombres de las personas de las  que no se hayaron coincidencia de nombres
+DROP TABLE IF EXISTS med_nomsincoincidencia_g3m_t1_variable_execution_name PURGE;
+CREATE TABLE med_nomsincoincidencia_g3m_t1_variable_execution_name STORED AS PARQUET AS
+WITH tabla_consecutivos_con_coincidencia AS (SELECT DISTINCT t1.consecutivo from med_identificados_g3m_l1_variable_execution_name t1)
+SELECT t1.consecutivo, t1.nombreenmedios
+FROM med_deltamedios_g3m_t7_variable_execution_name t1
+LEFT JOIN tabla_consecutivos_con_coincidencia t2
+ON t1.consecutivo = t2.consecutivo
+WHERE t2.consecutivo is null
+;
+
+INSERT INTO med_trazabilidad_g3m_variable_execution_name
+SELECT 
+DISTINCT consecutivo,
+t1.nombreEnMedios AS nombre,
+'gestionPersonas.sql' AS script,
+NOW() AS FECHA,
+'Al revisar con clientes y grupos de interes NO SE HALLARON COINCIDENCIAS DE NOMBRES' AS msg
+FROM med_nomsincoincidencia_g3m_t1_variable_execution_name t1;
+
+-- consecutivos que no son la persona y riesgo bajo
+DROP TABLE IF EXISTS med_nosonpersonaynoriesgo_g3m_t1_variable_execution_name PURGE;
+CREATE TABLE med_nosonpersonaynoriesgo_g3m_t1_variable_execution_name STORED AS PARQUET AS
+SELECT DISTINCT t1.consecutivo , t1.nombreenmedios
+FROM 
+med_identificados_g3m_l2_variable_execution_name  t1 
+LEFT JOIN
+med_DecisionPersona_g3m_t1_variable_execution_name    t2
+ON t1.llave_nombre_cn = t2.llave_nombre_cn
+LEFT JOIN
+med_riesgoMedios_g3m_t1_variable_execution_name  T4
+ON t1.llave_nombre_cn = t4.llave_nombre_cn
+WHERE !(
+           (t2.decisionpersona = 'SI ES LA PERSONA') OR 
+           (t2.decisionpersona = 'NO ES LA PERSONA' AND (( 
+           t4.riesgoMedios='MUY ALTO') OR ( t4.riesgoMedios='ALTO')))
+     ) ;
+
+
+
+-- no presentaron coincidencias con clientes del grupo y 
+--  la validación de homonimia arrojo NO SON LA PERSONA y  obtuvieron una calificación de riesgo Muy bajo, bajo o Medio
+DROP TABLE IF EXISTS med_sincoincidencia_g3m_t1_variable_execution_name PURGE;
+CREATE TABLE med_sincoincidencia_g3m_t1_variable_execution_name STORED AS PARQUET AS
+SELECT * FROM med_nomsincoincidencia_g3m_t1_variable_execution_name
+UNION ALL
+SELECT * FROM med_nosonpersonaynoriesgo_g3m_t1_variable_execution_name
+;
+
+
+--   SALIDA_SIN_COINCIDENCIA_PN: personas naturales que no presentaron coincidencias con clientes del grupo y 
+--  la validación de homonimia arrojo NO SON LA PERSONA y que obtuvieron una calificación de riesgo Muy bajo, bajo o Medio
+DROP TABLE IF EXISTS med_salida_sin_coincidencia_PN_g3m_t1_variable_execution_name PURGE;
+CREATE TABLE med_salida_sin_coincidencia_PN_g3m_t1_variable_execution_name STORED AS PARQUET AS
+SELECT 
+-- 
+t1.estadoprocesalclean, t1.delitoclean,
+'N' AS   TIPO_DE_PERSONA ,
+'' AS  TIPO_DE_IDENTIFICACION  ,
+'' AS  NRO_IDENTIFICACION ,
+regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(
+      UPPER(t1.primernombre) , 
+      "[áàÀâÂãäÁÃÄ]", "A"), "[éèÈêÊëÉË]","E"), "[íìÌýÝîÎïÍÏÿŸ]", "I"), "[óòÒôÔõöÓÕÖ]", "O"), "[úùÙûÛüÚÜ]", "U"),"[#Ñ]", "N") AS nombre_1,
+regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(
+      UPPER(t1.segundonombre) , 
+      "[áàÀâÂãäÁÃÄ]", "A"), "[éèÈêÊëÉË]","E"), "[íìÌýÝîÎïÍÏÿŸ]", "I"), "[óòÒôÔõöÓÕÖ]", "O"), "[úùÙûÛüÚÜ]", "U"),"[#Ñ]", "N") AS nombre_2,
+regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(
+      UPPER(t1.primerapellidoorazonsocial) , 
+      "[áàÀâÂãäÁÃÄ]", "A"), "[éèÈêÊëÉË]","E"), "[íìÌýÝîÎïÍÏÿŸ]", "I"), "[óòÒôÔõöÓÕÖ]", "O"), "[úùÙûÛüÚÜ]", "U"),"[#Ñ]", "N") AS apellido_1,
+regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(
+      UPPER(t1.segundoapellido) , 
+      "[áàÀâÂãäÁÃÄ]", "A"), "[éèÈêÊëÉË]","E"), "[íìÌýÝîÎïÍÏÿŸ]", "I"), "[óòÒôÔõöÓÕÖ]", "O"), "[úùÙûÛüÚÜ]", "U"),"[#Ñ]", "N") AS apellido_2,    
+'09' AS CATEGORIA ,
+'01' AS SUBCATEGORIA  ,
+'280010' AS CODIGO_AREA ,
+'' AS PASAPORTE ,
+concat_ws('-','INFOLAFT', t1.estadoprocesalclean, t1.delitoclean, CAST(t1.fechadelanoticiaddmmaaaa AS STRING) ) AS MOTIVO  ,
+CONCAT(CAST(YEAR(NOW())*10000 + MONTH(NOW())*100 + DAY(NOW()) AS STRING), CAST(t1.consecutivo as STRING)) AS CODIGOINT
+
+FROM 
+med_sincoincidencia_g3m_t1_variable_execution_name t0 
+LEFT JOIN 
+med_deltamedios_g3m_t7_variable_execution_name t1 
+ON t0.consecutivo = t1.consecutivo
+WHERE
+t1.tipopersonaclean LIKE '%natural%'
+AND t1.numerodocumento IS NULL
+;
+
+-- Si existen noticias con el mismo delito y estado procesal para una persona dejar solo una
+-- Una misma persona puede aparecer varias veces si viene con diferentes delitos y estados procesales
+DROP TABLE IF EXISTS med_salida_sin_coincidencia_PN_g3m_t2_variable_execution_name PURGE;
+CREATE TABLE med_salida_sin_coincidencia_PN_g3m_t2_variable_execution_name STORED AS PARQUET AS
+WITH PRE AS (
+SELECT  row_number() over (partition by  t1.estadoprocesalclean, t1.delitoclean, APELLIDO_1  ,APELLIDO_2  ,NOMBRE_1,  NOMBRE_2  
+  ORDER by CODIGOINT) as n, *
+FROM  med_salida_sin_coincidencia_PN_g3m_t1_variable_execution_name t1
+) SELECT 
+TIPO_DE_PERSONA ,
+TIPO_DE_IDENTIFICACION  ,
+NRO_IDENTIFICACION ,
+APELLIDO_1  ,APELLIDO_2 , NOMBRE_1,  NOMBRE_2 ,
+CATEGORIA ,SUBCATEGORIA  ,
+CODIGO_AREA ,
+PASAPORTE ,
+MOTIVO  ,
+CODIGOINT
+FROM pre 
+WHERE n = 1
+;
+
+-- Si ya esta en lista de control con misma categoria y subcategoria no añadir de nuevo
+DROP TABLE IF EXISTS med_salida_sin_coincidencia_PN_g3m_t3_variable_execution_name PURGE;
+CREATE TABLE med_salida_sin_coincidencia_PN_g3m_t3_variable_execution_name STORED AS PARQUET AS
+SELECT t1.*
+FROM 
+med_salida_sin_coincidencia_pn_g3m_t2_variable_execution_name t1
+LEFT JOIN 
+med_listaCtrl_g3m_t1_variable_execution_name t2
+ON 
+CAST(TRIM(t1.nro_identificacion) AS BIGINT) = t2.num_doc
+-- AND CAST(TRIM(t1.tipo_de_identificacion) AS INT) = t2.tip_doc -- TIPO DOC en estos casos es NULL
+AND CAST(TRIM(t1.categoria) AS BIGINT) = t2.cod_categoria
+AND CAST(TRIM(t1.subcategoria) AS BIGINT) = t2.cod_subcategoria
+-- AND concat(t1.nombre_1, t1.nombre_2, t1.apellido_1, t1.apellido_2) = t2.nom_pers1 
+-- Los nombres deben preprocesarse para la comparacion
+AND 
+regexp_replace(
+regexp_replace(
+regexp_replace(
+regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(
+regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(        
+LOWER(concat(t1.nombre_1, t1.nombre_2, t1.apellido_1, t1.apellido_2)) , 
+" sas ", " ")," ltda "," ")," s.a.s "," "), " sa "," ")," s.a. "," ")," s a s " ," "), " limitada ", " "), " s en c ", " "), " esp ", " "), " e.s.p ", " "), " eu ", " ")," s.a.s. "," "), -- sufijos empresas
+"[áàÀâÂãäÁÃÄ]", "a"), "[éèÈêÊëÉË]","e"), "[íìÌýÝîÎïÍÏÿŸ]", "i"), "[óòÒôÔõöÓÕÖ]", "o"), "[úùÙûÛüÚÜ]", "u") --- vocales acentuadas
+, '[#Ñ]','ñ') --- eñes permanecen en minuscula
+, '[[:space:]]','') --- eliminar espacios
+, '[^A-zñ0-9][\\\^]?','') --- eliminar caracteres especiales
+ = 
+regexp_replace(
+regexp_replace(
+regexp_replace(
+regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(
+regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(        
+LOWER(t2.nom_pers1) , 
+" sas ", " ")," ltda "," ")," s.a.s "," "), " sa "," ")," s.a. "," ")," s a s " ," "), " limitada ", " "), " s en c ", " "), " esp ", " "), " e.s.p ", " "), " eu ", " ")," s.a.s. "," "), -- sufijos empresas
+"[áàÀâÂãäÁÃÄ]", "a"), "[éèÈêÊëÉË]","e"), "[íìÌýÝîÎïÍÏÿŸ]", "i"), "[óòÒôÔõöÓÕÖ]", "o"), "[úùÙûÛüÚÜ]", "u") --- vocales acentuadas
+, '[#Ñ]','ñ') --- eñes permanecen en minuscula
+, '[[:space:]]','') --- eliminar espacios
+, '[^A-zñ0-9][\\\^]?','') --- eliminar caracteres especiales  
+
+WHERE t2.num_doc IS NULL
+;
+
+
+--    SALIDA_SIN_COINCIDENCIA_PJ: personas juridicas que no presentaron coincidencias con clientes del grupo y 
+--  la validación de homonimia arrojo NO SON LA PERSONA y que obtuvieron una calificación de riesgo Muy bajo, bajo o Medio
+-- TODO: si ya esta en lista de control con misma categoria y subcategoria no añadir de nuevo
+DROP TABLE IF EXISTS med_salida_sin_coincidencia_PJ_g3m_t1_variable_execution_name PURGE;
+CREATE TABLE med_salida_sin_coincidencia_Pj_g3m_t1_variable_execution_name STORED AS PARQUET AS
+SELECT 
+t1.estadoprocesalclean, t1.delitoclean,
+'J' AS   TIPO_DE_PERSONA ,
+'' AS  TIPO_DE_IDENTIFICACION  ,
+'' AS  NRO_IDENTIFICACION ,
+regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(
+      UPPER(t1.primerapellidoorazonsocial) , 
+      "[áàÀâÂãäÁÃÄ]", "A"), "[éèÈêÊëÉË]","E"), "[íìÌýÝîÎïÍÏÿŸ]", "I"), "[óòÒôÔõöÓÕÖ]", "O"), "[úùÙûÛüÚÜ]", "U"),"[#Ñ]", "N")  AS  RAZON_SOCIAL  ,
+'09' AS CATEGORIA ,
+'01' AS SUBCATEGORIA  ,
+'280010' AS CODIGO_AREA ,
+'' AS PASAPORTE ,
+concat_ws('-','INFOLAFT', t1.estadoprocesalclean, t1.delitoclean, CAST(t1.fechadelanoticiaddmmaaaa AS STRING) ) AS MOTIVO  ,
+CONCAT(CAST(YEAR(NOW())*10000 + MONTH(NOW())*100 + DAY(NOW()) AS STRING), CAST(t1.consecutivo as STRING)) AS CODIGOINT
+
+FROM 
+med_sincoincidencia_g3m_t1_variable_execution_name t0 
+LEFT JOIN 
+med_deltamedios_g3m_t7_variable_execution_name t1 
+ON t0.consecutivo = t1.consecutivo
+WHERE
+t1.tipopersonaclean  LIKE '%juri%'
+AND t1.numerodocumento IS NULL
+;
+
+
+-- Si existen noticias con el mismo delito y estado procesal para una persona dejar solo una
+-- Una misma persona puede aparecer varias veces si viene con diferentes delitos y estados procesales
+DROP TABLE IF EXISTS med_salida_sin_coincidencia_PJ_g3m_t2_variable_execution_name PURGE;
+CREATE TABLE med_salida_sin_coincidencia_PJ_g3m_t2_variable_execution_name STORED AS PARQUET AS
+WITH PRE AS (
+SELECT  row_number() over (partition by  t1.estadoprocesalclean, t1.delitoclean, RAZON_SOCIAL
+  ORDER by CODIGOINT) as n, *
+FROM  med_salida_sin_coincidencia_PJ_g3m_t1_variable_execution_name t1
+) SELECT 
+TIPO_DE_PERSONA ,
+TIPO_DE_IDENTIFICACION  ,
+NRO_IDENTIFICACION ,
+RAZON_SOCIAL,
+CATEGORIA ,SUBCATEGORIA  ,
+CODIGO_AREA ,
+PASAPORTE ,
+MOTIVO  ,
+CODIGOINT
+FROM pre 
+WHERE n = 1
+;
+
+-- Si ya esta en lista de control con misma categoria y subcategoria no añadir de nuevo
+DROP TABLE IF EXISTS med_salida_sin_coincidencia_Pj_g3m_t3_variable_execution_name PURGE;
+CREATE TABLE med_salida_sin_coincidencia_Pj_g3m_t3_variable_execution_name STORED AS PARQUET AS
+SELECT t1.*
+FROM 
+med_salida_sin_coincidencia_pj_g3m_t2_variable_execution_name t1
+LEFT JOIN 
+med_listaCtrl_g3m_t1_variable_execution_name t2
+ON 
+CAST(TRIM(t1.nro_identificacion) AS BIGINT) = t2.num_doc
+-- AND CAST(TRIM(t1.tipo_de_identificacion) AS INT) = t2.tip_doc -- TIPO DOC en estos casos es NULL
+AND CAST(TRIM(t1.categoria) AS BIGINT) = t2.cod_categoria
+AND CAST(TRIM(t1.subcategoria) AS BIGINT) = t2.cod_subcategoria
+-- AND concat(t1.nombre_1, t1.nombre_2, t1.apellido_1, t1.apellido_2) = t2.nom_pers1 
+-- Los nombres deben preprocesarse para la comparacion
+AND 
+regexp_replace(
+regexp_replace(
+regexp_replace(
+regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(
+regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(        
+LOWER(concat(t1.RAZON_SOCIAL)) , 
+" sas ", " ")," ltda "," ")," s.a.s "," "), " sa "," ")," s.a. "," ")," s a s " ," "), " limitada ", " "), " s en c ", " "), " esp ", " "), " e.s.p ", " "), " eu ", " ")," s.a.s. "," "), -- sufijos empresas
+"[áàÀâÂãäÁÃÄ]", "a"), "[éèÈêÊëÉË]","e"), "[íìÌýÝîÎïÍÏÿŸ]", "i"), "[óòÒôÔõöÓÕÖ]", "o"), "[úùÙûÛüÚÜ]", "u") --- vocales acentuadas
+, '[#Ñ]','ñ') --- eñes permanecen en minuscula
+, '[[:space:]]','') --- eliminar espacios
+, '[^A-zñ0-9][\\\^]?','') --- eliminar caracteres especiales
+ = 
+regexp_replace(
+regexp_replace(
+regexp_replace(
+regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(
+regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(        
+LOWER(t2.nom_pers1) , 
+" sas ", " ")," ltda "," ")," s.a.s "," "), " sa "," ")," s.a. "," ")," s a s " ," "), " limitada ", " "), " s en c ", " "), " esp ", " "), " e.s.p ", " "), " eu ", " ")," s.a.s. "," "), -- sufijos empresas
+"[áàÀâÂãäÁÃÄ]", "a"), "[éèÈêÊëÉË]","e"), "[íìÌýÝîÎïÍÏÿŸ]", "i"), "[óòÒôÔõöÓÕÖ]", "o"), "[úùÙûÛüÚÜ]", "u") --- vocales acentuadas
+, '[#Ñ]','ñ') --- eñes permanecen en minuscula
+, '[[:space:]]','') --- eliminar espacios
+, '[^A-zñ0-9][\\\^]?','') --- eliminar caracteres especiales  
+
+WHERE t2.num_doc IS NULL
+;
+
+
+
+-- La trazabilidad dicotomica sobre SI ES LA PERSONA O NO ES LA PERSONA involucra clientes, no consecutivos, ya que cada consecutivo puede 
+-- estar relacionado con multiples clientes
+/*
+INSERT INTO med_trazabilidad_g3m_variable_execution_name
+SELECT 
+DISTINCT consecutivo,
+NOW() AS FECHA,
+'Proceso de Homonimia indica SI ES LA PERSONA ' AS causaExclusion
+FROM med_DecisionPersona_g3m_t1_variable_execution_name t1
+WHERE t1.decisionpersona = 'SI ES LA PERSONA'
+
+INSERT INTO med_trazabilidad_g3m_variable_execution_name
+SELECT 
+DISTINCT consecutivo,
+NOW() AS FECHA,
+'Proceso de Homonimia indica NO ES LA PERSONA ' AS causaExclusion
+FROM med_DecisionPersona_g3m_t1_variable_execution_name t1
+WHERE t1.decisionpersona = 'NO ES LA PERSONA'
+*/
+
+-- SALIDA_CON_NIT_PN:Salida lista de control personas naturales con nit
+-- TODO: si ya esta en lista de control con misma categoria y subcategoria no añadir de nuevo
+-- WARNING: No se estan mandando a LC los identificados, esto está bien? RTA:coincide con lo que se hace en sas
+DROP TABLE IF EXISTS med_salida_con_nit_PN_g3m_t1_variable_execution_name PURGE;
+CREATE TABLE med_salida_con_nit_PN_g3m_t1_variable_execution_name STORED AS PARQUET AS
+SELECT 
+'N' AS   TIPO_DE_PERSONA ,
+-- CAST(t1.tipodocumento AS STRING) AS  TIPO_DE_IDENTIFICACION  ,
+t1.numerodocumento  AS  NRO_IDENTIFICACION ,
+
+regexp_replace(
+regexp_replace(
+regexp_replace(
+regexp_replace(
+regexp_replace(
+  t1.primerapellidoorazonsocial,
+"[áàÀâÂãäÁÃÄ]", "A"), "[éèÈêÊëÉË]","E"), "[íìÌýÝîÎïÍÏÿŸ]", "I"), "[óòÒôÔõöÓÕÖ]", "O"), "[úùÙûÛüÚÜ]", "U") --- vocales acentuadas
+ AS  APELLIDO_1  ,
+
+regexp_replace(
+regexp_replace(
+regexp_replace(
+regexp_replace(
+regexp_replace(
+  t1.segundoapellido,
+"[áàÀâÂãäÁÃÄ]", "A"), "[éèÈêÊëÉË]","E"), "[íìÌýÝîÎïÍÏÿŸ]", "I"), "[óòÒôÔõöÓÕÖ]", "O"), "[úùÙûÛüÚÜ]", "U") --- vocales acentuadas
+ AS  APELLIDO_2  ,
+
+regexp_replace(
+regexp_replace(
+regexp_replace(
+regexp_replace(
+regexp_replace(
+  t1.primernombre,
+"[áàÀâÂãäÁÃÄ]", "A"), "[éèÈêÊëÉË]","E"), "[íìÌýÝîÎïÍÏÿŸ]", "I"), "[óòÒôÔõöÓÕÖ]", "O"), "[úùÙûÛüÚÜ]", "U") --- vocales acentuadas
+ AS  NOMBRE_1, 
+
+regexp_replace(
+regexp_replace(
+regexp_replace(
+regexp_replace(
+regexp_replace(
+  t1.segundonombre,
+"[áàÀâÂãäÁÃÄ]", "A"), "[éèÈêÊëÉË]","E"), "[íìÌýÝîÎïÍÏÿŸ]", "I"), "[óòÒôÔõöÓÕÖ]", "O"), "[úùÙûÛüÚÜ]", "U") --- vocales acentuadas
+AS NOMBRE_2,  
+  
+(CASE WHEN lower(t1.estadoprocesalclean) LIKE '%extraditado%' THEN '02' ELSE '05' END) AS CATEGORIA,
+(CASE WHEN lower(t1.estadoprocesalclean) LIKE '%extraditado%' THEN '25' ELSE '27' END) AS SUBCATEGORIA,
+'280010' AS CODIGO_AREA ,
+'' AS PASAPORTE ,
+concat_ws('-','INFOLAFT', t1.estadoprocesalclean, t1.delitoclean, CAST(t1.fechadelanoticiaddmmaaaa AS STRING) ) AS MOTIVO  ,
+CONCAT(CAST(YEAR(NOW())*10000 + MONTH(NOW())*100 + DAY(NOW()) AS STRING), CAST(t1.consecutivo as STRING)) AS CODIGOINT
+FROM 
+-- med_deltamedios_g3m_t8_variable_execution_name t1 
+med_deltamedios_g3m_t81_variable_execution_name t1  -- se excluyen sensibles
+WHERE
+t1.tipopersonaclean  LIKE '%natu%'
+;
+
+-- Se excluyen mejor desde insumoMedios ya que ningun identificado entra a lista de control
+-- -- Excluir sensibles DE salida con nit pn
+-- -- Se hace en otro paso para facilitar revisiones posteriores
+-- DROP TABLE IF EXISTS med_salida_con_nit_PN_g3m_t2_variable_execution_name PURGE
+-- CREATE TABLE med_salida_con_nit_PN_g3m_t2_variable_execution_name STORED AS PARQUET AS
+-- SELECT
+-- t1.*
+-- FROM med_salidaconnitPN_g3m_t1_variable_execution_name t1
+-- --- Clientes sensibles
+-- LEFT JOIN med_sensibles_gmac_t1_variable_execution_name t10
+-- ON t1.numerodocumento = t10.id_num AND t1.TIPO_DE_IDENTIFICACION = t10.tipo_doc
+-- WHERE t10.id_num is NULL
+
+
+
+-- SALIDA_CON_NIT_PJ: Salida lista de control personas juridicas con nit
+-- TODO: si ya esta en lista de control con misma categoria y subcategoria no añadir de nuevo
+DROP TABLE IF EXISTS med_salida_con_nit_PJ_g3m_t1_variable_execution_name PURGE;
+CREATE TABLE med_salida_con_nit_PJ_g3m_t1_variable_execution_name STORED AS PARQUET AS
+SELECT 
+'J' AS   TIPO_DE_PERSONA ,
+CAST(t1.tipodocumento AS STRING) AS  TIPO_DE_IDENTIFICACION  ,
+CAST(t1.numerodocumento as STRING) AS  NRO_IDENTIFICACION ,
+
+regexp_replace(
+regexp_replace(
+regexp_replace(
+regexp_replace(
+regexp_replace(
+t1.primerapellidoorazonsocial ,
+"[áàÀâÂãäÁÃÄ]", "A"), "[éèÈêÊëÉË]","E"), "[íìÌýÝîÎïÍÏÿŸ]", "I"), "[óòÒôÔõöÓÕÖ]", "O"), "[úùÙûÛüÚÜ]", "U") --- vocales acentuadas
+AS  RAZON_SOCIAL  ,
+t1.primerapellidoorazonsocial,
+(CASE WHEN lower(t1.estadoprocesalclean) LIKE '%extraditado%' THEN '02' ELSE '05' END) AS CATEGORIA,
+(CASE WHEN lower(t1.estadoprocesalclean) LIKE '%extraditado%' THEN '26' ELSE '27' END) AS SUBCATEGORIA,
+'280010' AS CODIGO_AREA ,
+'' AS PASAPORTE ,
+concat_ws('-','INFOLAFT', t1.estadoprocesalclean, t1.delitoclean, CAST(t1.fechadelanoticiaddmmaaaa AS STRING) ) AS MOTIVO  ,
+CONCAT(CAST(YEAR(NOW())*10000 + MONTH(NOW())*100 + DAY(NOW()) AS STRING), CAST(t1.consecutivo as STRING)) AS CODIGOINT
+FROM 
+-- med_deltamedios_g3m_t8_variable_execution_name t1 
+med_deltamedios_g3m_t81_variable_execution_name t1  -- se excluyen sensibles
+WHERE
+t1.tipopersonaclean  LIKE '%juri%'
+;
+
+--cambio Lina Osorio 25/10/2021 clientes que no se estaban subiendo
+--Cambio Lmoncada 02/09/2024 el Condicional Cat 02 - Sub 26  por 02 - 05, ya que es extraditado, se hablo con lina osorio. y es cliente
+-- SALIDA_CON_NIT_RESTANTES_DELTA-------------------------
+DROP TABLE IF EXISTS med_salida_con_nit_restantes_variable_execution_name PURGE;
+CREATE TABLE med_salida_con_nit_restantes_variable_execution_name STORED AS PARQUET AS
+
+with no_coinciden as (
+select t1.consecutivo consecutivo, t1.nombreenmedios from med_sincoincidencia_g3m_t1_variable_execution_name t0 
+right join med_deltamedios_g3m_t7_variable_execution_name t1 
+on t0.consecutivo = t1.consecutivo where  t0.consecutivo is null),
+
+info as (select distinct nit, tpdoc, a0.consecutivo from med_identificados_g3m_l1_variable_execution_name a1
+inner join no_coinciden a0 on a0.consecutivo=a1.consecutivo)
+
+SELECT 
+(case when (t1.segundoapellido='' and t1.primernombre='' and t1.segundonombre='') then 'J' else 'N'  end)  AS   TIPO_DE_PERSONA ,
+t2.tpdoc AS  TIPO_DE_IDENTIFICACION  ,
+cast(t2.nit as bigint) AS  NRO_IDENTIFICACION ,
+regexp_replace(
+regexp_replace(
+regexp_replace(
+regexp_replace(
+regexp_replace(
+  t1.primerapellidoorazonsocial,
+"[áàÀâÂãäÁÃÄ]", "A"), "[éèÈêÊëÉË]","E"), "[íìÌýÝîÎïÍÏÿŸ]", "I"), "[óòÒôÔõöÓÕÖ]", "O"), "[úùÙûÛüÚÜ]", "U") --- vocales acentuadas
+ AS  APELLIDO_1  ,
+
+regexp_replace(
+regexp_replace(
+regexp_replace(
+regexp_replace(
+regexp_replace(
+  t1.segundoapellido,
+"[áàÀâÂãäÁÃÄ]", "A"), "[éèÈêÊëÉË]","E"), "[íìÌýÝîÎïÍÏÿŸ]", "I"), "[óòÒôÔõöÓÕÖ]", "O"), "[úùÙûÛüÚÜ]", "U") --- vocales acentuadas
+ AS  APELLIDO_2  ,
+
+regexp_replace(
+regexp_replace(
+regexp_replace(
+regexp_replace(
+regexp_replace(
+  t1.primernombre,
+"[áàÀâÂãäÁÃÄ]", "A"), "[éèÈêÊëÉË]","E"), "[íìÌýÝîÎïÍÏÿŸ]", "I"), "[óòÒôÔõöÓÕÖ]", "O"), "[úùÙûÛüÚÜ]", "U") --- vocales acentuadas
+ AS  NOMBRE_1, 
+
+regexp_replace(
+regexp_replace(
+regexp_replace(
+regexp_replace(
+regexp_replace(
+  t1.segundonombre,
+"[áàÀâÂãäÁÃÄ]", "A"), "[éèÈêÊëÉË]","E"), "[íìÌýÝîÎïÍÏÿŸ]", "I"), "[óòÒôÔõöÓÕÖ]", "O"), "[úùÙûÛüÚÜ]", "U") --- vocales acentuadas
+AS NOMBRE_2,  
+(CASE WHEN lower(t1.estadoprocesalclean) LIKE '%extraditado%' THEN '02' ELSE '05' END) AS CATEGORIA,
+(CASE WHEN lower(t1.estadoprocesalclean) LIKE '%extraditado%' THEN '25' ELSE '27' END) AS SUBCATEGORIA,
+'280010' AS CODIGO_AREA ,
+'' AS PASAPORTE ,
+concat_ws('-','INFOLAFT', t1.estadoprocesalclean, t1.delitoclean, CAST(t1.fechadelanoticiaddmmaaaa AS STRING) ) AS MOTIVO  ,
+CONCAT(CAST(YEAR(NOW())*10000 + MONTH(NOW())*100 + DAY(NOW()) AS STRING), CAST(t1.consecutivo as STRING)) AS CODIGOINT
+FROM no_coinciden t0 inner join med_deltamedios_g3m_t7_variable_execution_name t1  on t0.consecutivo = t1.consecutivo
+inner join info t2 on t2.consecutivo = t1.consecutivo;
