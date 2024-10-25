@@ -15,7 +15,7 @@ REQUERIMIENTOS:
   - med_deltaMedios_g3m_t1_variable_execution_name:tabla original de noticias con consecutivo (Desde insumoMedios.sql)
   - med_proveedores_g3m_t2_variable_execution_name:tabla proveedores (Desde insumoProveedores.sql)
   - med_identificados_g3m_l2_variable_execution_name: Clientes identificados con coincidencias de nombre en las noticias y marca de empleados (Desde identificados.sql)
-  - med_DecisionPersona_g3m_t1_variable_execution_name:  Decision sobre las personas  con coincidencia con clientes en cuanto a si ES LA PERSONA o NO ES LA PERSONA (Desde determinacionPersonas.sql)
+  - med_DecisionPersona_g3m_t1_variable_execution_name:  Decision sobre las personas  con coincidencia con clientes en cuanto a si ES LA PERSONA o NO ES LA PERSONA (Desde determinacionPersonas.xls)
   - med_delitos_g3m_t1_variable_execution_name: Delitos validos
   - med_deltaMedios_g3m_t3_variable_execution_name: 
   - med_clientes_g3m_t1_variable_execution_name: conocer quienes son empleados
